@@ -1,5 +1,5 @@
 {
-	"name": "ollama-uv",
+	"name": "ollama-chat",
 	"build": {
 	  "dockerfile": "../Dockerfile"
 	},

@@ -1,8 +1,0 @@
-https://note.com/tamo2918/n/nafd616519de9
-
-ollama serve
-ollama pull gpt-oss:20b
-ollama list
-ollama run gpt-oss:20b
-
-ollama rm 
