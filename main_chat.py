@@ -34,6 +34,7 @@ if prompt := st.chat_input("What is up?"):
         # response_text = response_generator_ollama_python()
         # response_text = response_generator_langchain_ollama()
         response_text = response_generator_langchain_ollama_rag()
+        # response_text = response_generator_langchain_gemini_rag()
         
         # ストリームで表示
         for res in response_text:

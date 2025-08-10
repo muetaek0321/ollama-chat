@@ -5,16 +5,22 @@ os.environ["HF_HOME"] = "./pretrained" # 事前学習モデルの保存先指定
 import streamlit as st
 import torch
 from markdown import Markdown
+from dotenv import load_dotenv
 from ollama import chat
 from ollama import ChatResponse
 from langchain_ollama.llms import OllamaLLM
+from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
 from langchain.embeddings import HuggingFaceEmbeddings
 from langchain_chroma import Chroma
 
 
+# 環境変数設定
+load_dotenv()
+
+
 __all__ = ["response_generator_ollama_python", "response_generator_langchain_ollama",
-           "response_generator_langchain_ollama_rag"]
+           "response_generator_langchain_ollama_rag", "response_generator_langchain_gemini_rag"]
 
 
 def response_generator_ollama_python() -> str:
@@ -97,6 +103,43 @@ def response_generator_langchain_ollama_rag() -> str:
     ] + [HumanMessage(content=RAG_PROMPT.format(question=user_input, context=context))]
     
     response = llm.invoke(messages)
+    
+    response_html = Markdown().convert(response)
+    
+    return response_html
+
+
+def response_generator_langchain_gemini_rag() -> str:
+    """Geminiを使用+RAG
+    """
+    llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash")
+    
+    # 直前のユーザの入力を取得
+    user_input = st.session_state.messages[-1]["content"]
+    
+    # ベクトル化する準備
+    model_kwargs = {
+        "device": "cuda" if torch.cuda.is_available() else "cpu", 
+        "trust_remote_code": True
+    }
+    embedding = HuggingFaceEmbeddings(
+        model_name="pfnet/plamo-embedding-1b",
+        model_kwargs=model_kwargs
+    )
+    
+    # DBを読み込んで知識データ取得
+    vectorstore = Chroma(collection_name="elephants", 
+                         persist_directory="chat/chroma", 
+                         embedding_function=embedding)
+    docs = vectorstore.similarity_search(query=user_input, k=10)
+    context = "\n".join([f"Content:\n{doc.page_content}" for doc in docs])
+    
+    messages = [
+        ROLES[msg["role"]](content=msg["content"]) 
+        for msg in st.session_state.messages[:-1]
+    ] + [HumanMessage(content=RAG_PROMPT.format(question=user_input, context=context))]
+    
+    response = llm.invoke(messages).content
     
     response_html = Markdown().convert(response)
     
