@@ -30,7 +30,7 @@ class JapaneseCharacterTextSplitter(RecursiveCharacterTextSplitter):
 
 def main() -> None:
     # Webページの内容を知識として読み込み
-    with open("./urls.csv", mode='r', encoding='utf-8') as f:
+    with open("../chat/urls.csv", mode='r', encoding='utf-8') as f:
         urls = f.read().split("\n")
     loader = UnstructuredURLLoader(urls=urls)
     docs = loader.load()

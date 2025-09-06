@@ -73,7 +73,7 @@ RAG_PROMPT = """
 コンテキスト: {context}
 答え:
 """
-
+DATABASE_DIR = "./database/chroma"
 
 def response_generator_langchain_ollama_rag() -> str:
     """langchain_ollamaを使用+RAG
@@ -95,7 +95,7 @@ def response_generator_langchain_ollama_rag() -> str:
     
     # DBを読み込んで知識データ取得
     vectorstore = Chroma(collection_name="elephants", 
-                         persist_directory="chat/chroma", 
+                         persist_directory=DATABASE_DIR, 
                          embedding_function=embedding)
     docs = vectorstore.similarity_search(query=user_input, k=10)
     context = "\n".join([f"Content:\n{doc.page_content}" for doc in docs])
