@@ -1,9 +1,11 @@
+import os
 import asyncio
 import time
 import json
 from typing import Generator, List, Dict
 
 import streamlit as st
+from dotenv import load_dotenv
 from markdown import Markdown
 from langchain_ollama import ChatOllama
 from langchain_google_genai import ChatGoogleGenerativeAI
@@ -11,6 +13,10 @@ from langchain.prompts import PromptTemplate
 from langchain_mcp_adapters.client import MultiServerMCPClient
 from langchain.agents import create_tool_calling_agent, AgentExecutor
 from langchain_core.messages import HumanMessage, AIMessage
+
+
+# 環境変数設定
+load_dotenv()
 
 
 # 定数
@@ -46,8 +52,8 @@ async def create_gemini_mcp_response(
     messages: List[Dict[str, str]]
 ) -> str:        
     # モデルを準備
-    # llm = ChatOllama(model='gpt-oss:20b')
-    llm = ChatGoogleGenerativeAI(model="gemini-2.0-flash")
+    llm = ChatOllama(model='gpt-oss:20b')
+    # llm = ChatGoogleGenerativeAI(model="gemini-2.0-flash")
     
     # プロンプトを設定
     prompt = PromptTemplate.from_template(MCP_PROMPT)
@@ -58,6 +64,9 @@ async def create_gemini_mcp_response(
     # MCPサーバの設定を読み込み
     with open(MCP_CONFIG_PATH, mode="r") as f:
         mcp_config = json.load(f)
+        
+    # # BraveSearchのAPIキーを設定
+    # mcp_config["mcpServers"]["brave-search"]["env"]["BRAVE_API_KEY"] = os.environ["BRAVE_API_KEY"]
     
     # ツール化
     mcp_client = MultiServerMCPClient(mcp_config["mcpServers"])
@@ -69,6 +78,9 @@ async def create_gemini_mcp_response(
     
     # 返答を取得
     response = await executor.ainvoke({"question": user_input})
+    
+    with open("./output.md", mode="w", encoding="utf-8") as f:
+        f.write(response["output"])
     
     # 返答を成形（makrddown -> HTML）
     response = Markdown().convert(response["output"])

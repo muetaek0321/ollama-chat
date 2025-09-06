@@ -56,6 +56,9 @@ def response_generator_langchain_ollama() -> str:
     
     response = llm.invoke(messages)
     
+    with open("./output.md", mode="w", encoding="cp932") as f:
+        f.write(response)
+    
     response_html = Markdown().convert(response)
     
     return response_html
@@ -104,6 +107,9 @@ def response_generator_langchain_ollama_rag() -> str:
     
     response = llm.invoke(messages)
     
+    with open("./output.md", mode="w", encoding="utf-8") as f:
+        f.write(response)
+    
     response_html = Markdown().convert(response)
     
     return response_html
@@ -140,6 +146,9 @@ def response_generator_langchain_gemini_rag() -> str:
     ] + [HumanMessage(content=RAG_PROMPT.format(question=user_input, context=context))]
     
     response = llm.invoke(messages).content
+    
+    with open("./output.md", mode="w", encoding="cp932") as f:
+        f.write(response)
     
     response_html = Markdown().convert(response)
     
