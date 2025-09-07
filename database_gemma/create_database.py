@@ -9,6 +9,12 @@ from langchain.embeddings import HuggingFaceEmbeddings
 from langchain_chroma import Chroma
 from langchain_ollama.llms import OllamaLLM
 from langchain.prompts import PromptTemplate
+from huggingface_hub import login
+from dotenv import load_dotenv
+
+
+load_dotenv()
+login(token=os.environ["HUGGINGFACE_TOKEN"]) 
 
 # 定数
 TEMPLATE = """
@@ -41,9 +47,9 @@ def main() -> None:
     docs = text_splitter.split_documents(docs)
     
     # ベクトル化する準備
-    model_kwargs = {"device": "cuda", "trust_remote_code": True}
+    model_kwargs = {"device": "cuda"}
     embedding = HuggingFaceEmbeddings(
-        model_name="pfnet/plamo-embedding-1b",
+        model_name="google/embeddinggemma-300m",
         model_kwargs=model_kwargs
     )
     
