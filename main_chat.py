@@ -1,6 +1,8 @@
 """
 https://docs.streamlit.io/develop/tutorials/chat-and-llm-apps/build-conversational-apps
 """
+import time
+
 import streamlit as st
 
 from chat.generate_response import *
@@ -32,11 +34,15 @@ if prompt := st.chat_input("What is up?"):
         res_container = st.empty()
         
         # 返答生成
+        s_time = time.perf_counter()
         # response_text = response_generator_ollama_python()
         # response_text = response_generator_langchain_ollama()
         response_text = response_generator_langchain_ollama_rag()
         # response_text = response_generator_langchain_gemini_rag()
         # response_text = response_generator_mcp()
+        
+        # 返答生成にかかった時間を表示
+        print(f"Elapsed time: {time.perf_counter() - s_time:.2f} seconds")
         
         # ストリームで表示
         for res in response_text:

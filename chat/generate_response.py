@@ -18,6 +18,9 @@ from langchain_chroma import Chroma
 # 環境変数設定
 load_dotenv()
 
+# 定数
+# OLLAMA_MODEL = "gpt-oss:20b"
+OLLAMA_MODEL = "gemma4:e4b"
 
 __all__ = ["response_generator_ollama_python", "response_generator_langchain_ollama",
            "response_generator_langchain_ollama_rag", "response_generator_langchain_gemini_rag"]
@@ -27,7 +30,7 @@ def response_generator_ollama_python() -> str:
     """ollama-pythonを使用
     """
     response: ChatResponse = chat(
-        model='gpt-oss:20b', 
+        model=OLLAMA_MODEL, 
         messages=st.session_state.messages,
         options={"temperature": 1, "reasoning_effort": "low"}
     )
@@ -46,7 +49,7 @@ ROLES = {
 def response_generator_langchain_ollama() -> str:
     """langchain_ollamaを使用
     """
-    llm = OllamaLLM(model='gpt-oss:20b')
+    llm = OllamaLLM(model=OLLAMA_MODEL)
     
     system_prompt = "あなたはユーザの質問に答えるアシスタントです。回答は200文字程度で要点だけをまとめて簡潔に答えてください。"
     messages = [SystemMessage(content=system_prompt)] + [
@@ -78,7 +81,7 @@ DATABASE_DIR = "./database/chroma"
 def response_generator_langchain_ollama_rag() -> str:
     """langchain_ollamaを使用+RAG
     """
-    llm = OllamaLLM(model='gpt-oss:20b')
+    llm = OllamaLLM(model=OLLAMA_MODEL)
     
     # 直前のユーザの入力を取得
     user_input = st.session_state.messages[-1]["content"]
