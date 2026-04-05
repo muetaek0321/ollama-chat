@@ -1,4 +1,4 @@
-FROM ollama/ollama:0.11.4-rc0
+FROM ollama/ollama:latest
 
 # 必要なソフトのインストール
 RUN apt-get update && apt-get install -y \
