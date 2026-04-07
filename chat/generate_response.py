@@ -13,6 +13,10 @@ from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
 from langchain.embeddings import HuggingFaceEmbeddings
 from langchain_chroma import Chroma
+from langchain_huggingface import HuggingFaceEndpoint, ChatHuggingFace, HuggingFacePipeline
+from transformers import AutoModelForCausalLM, AutoTokenizer
+
+from chat.parse_json import parse_chat_output
 
 
 # 環境変数設定
@@ -21,9 +25,19 @@ load_dotenv()
 # 定数
 # OLLAMA_MODEL = "gpt-oss:20b"
 OLLAMA_MODEL = "gemma4:e4b"
+HF_MODEL = "llm-jp/llm-jp-4-8b-thinking"
+ROLES = {
+    "user": HumanMessage,
+    "assistant": AIMessage
+}
 
-__all__ = ["response_generator_ollama_python", "response_generator_langchain_ollama",
-           "response_generator_langchain_ollama_rag", "response_generator_langchain_gemini_rag"]
+
+__all__ = ["response_generator_ollama_python", 
+           "response_generator_huggingface_model",
+           "response_generator_langchain_ollama",
+           "response_generator_langchain_huggingface",
+           "response_generator_langchain_ollama_rag", 
+           "response_generator_langchain_gemini_rag"]
 
 
 def response_generator_ollama_python() -> str:
@@ -40,10 +54,51 @@ def response_generator_ollama_python() -> str:
     return response_html
 
 
-ROLES = {
-    "user": HumanMessage,
-    "assistant": AIMessage
-}
+def response_generator_huggingface_model() -> str:
+    """HuggingFaceのモデルを使用
+    """
+    tokenizer = AutoTokenizer.from_pretrained(
+        HF_MODEL,
+        trust_remote_code=True,
+    )
+    model = AutoModelForCausalLM.from_pretrained(
+        HF_MODEL,
+        dtype=torch.bfloat16,
+        device_map="auto",
+        trust_remote_code=True,
+    )
+    model.eval()
+    
+    system_prompt = [{
+        "role": "system",
+        "content": "あなたはユーザの質問に答えるアシスタントです。回答は200文字程度で要点だけをまとめて簡潔に答えてください。"
+    }]
+    
+    prompt: str = tokenizer.apply_chat_template(
+        system_prompt + st.session_state.messages,
+        tokenize=False,
+        add_generation_prompt=True,
+        reasoning_effort="low",  # {"low", "medium", "high"}
+    )
+    inputs = tokenizer(prompt, return_tensors="pt").to(model.device)
+    
+    with torch.no_grad():
+        output_tensor = model.generate(
+            **inputs,
+            max_new_tokens=256,
+            do_sample=True,
+            temperature=0.7,
+            top_p=0.9,
+        )
+    
+    # 出力データを変換して返答文を取得
+    generated_ids: list[int] = output_tensor[0][inputs["input_ids"].shape[1]:].tolist()
+    response = tokenizer.decode(generated_ids)
+    response = parse_chat_output(response)
+    
+    response_html = Markdown().convert(response["assistant"]["message"])
+    
+    return response_html
 
 
 def response_generator_langchain_ollama() -> str:
@@ -59,8 +114,48 @@ def response_generator_langchain_ollama() -> str:
     
     response = llm.invoke(messages)
     
-    with open("./output.md", mode="w", encoding="cp932") as f:
-        f.write(response)
+    # with open("./output.md", mode="w", encoding="cp932") as f:
+    #     f.write(response)
+    
+    response_html = Markdown().convert(response)
+    
+    return response_html
+
+
+def response_generator_langchain_huggingface() -> str:
+    """langchain_huggingfaceを使用
+    """
+    # llm = HuggingFaceEndpoint(
+    #     endpoint_url=HF_MODEL,
+    #     max_new_tokens=1024,
+    #     do_sample=False,
+    # )
+    # llm = ChatHuggingFace(llm=llm)
+    
+    # tokenizer = AutoTokenizer.from_pretrained(
+    #     HF_MODEL,
+    #     # trust_remote_code is required to load custom tokenizer and reasoning parser.
+    #     trust_remote_code=True,
+    # )
+    # model = AutoModelForCausalLM.from_pretrained(
+    #     HF_MODEL,
+    #     dtype=torch.bfloat16,
+    #     device_map="auto",
+    #     trust_remote_code=True,
+    # )
+    # model.eval()
+    
+    llm = HuggingFacePipeline(
+        
+    )
+    
+    system_prompt = "あなたはユーザの質問に答えるアシスタントです。回答は200文字程度で要点だけをまとめて簡潔に答えてください。"
+    messages = [SystemMessage(content=system_prompt)] + [
+        ROLES[msg["role"]](content=msg["content"]) 
+        for msg in st.session_state.messages
+    ]
+    
+    response = llm.invoke(messages)
     
     response_html = Markdown().convert(response)
     
