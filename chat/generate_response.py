@@ -14,7 +14,7 @@ from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
 from langchain.embeddings import HuggingFaceEmbeddings
 from langchain_chroma import Chroma
 from langchain_huggingface import HuggingFaceEndpoint, ChatHuggingFace, HuggingFacePipeline
-from transformers import AutoModelForCausalLM, AutoTokenizer
+from transformers import AutoModelForCausalLM, AutoTokenizer, pipeline
 
 from chat.parse_json import parse_chat_output
 
@@ -37,6 +37,7 @@ __all__ = ["response_generator_ollama_python",
            "response_generator_langchain_ollama",
            "response_generator_langchain_huggingface",
            "response_generator_langchain_ollama_rag", 
+           "response_generator_langchain_huggingface_rag",
            "response_generator_langchain_gemini_rag"]
 
 
@@ -125,39 +126,37 @@ def response_generator_langchain_ollama() -> str:
 def response_generator_langchain_huggingface() -> str:
     """langchain_huggingfaceを使用
     """
-    # llm = HuggingFaceEndpoint(
-    #     endpoint_url=HF_MODEL,
-    #     max_new_tokens=1024,
-    #     do_sample=False,
-    # )
-    # llm = ChatHuggingFace(llm=llm)
     
-    # tokenizer = AutoTokenizer.from_pretrained(
-    #     HF_MODEL,
-    #     # trust_remote_code is required to load custom tokenizer and reasoning parser.
-    #     trust_remote_code=True,
-    # )
-    # model = AutoModelForCausalLM.from_pretrained(
-    #     HF_MODEL,
-    #     dtype=torch.bfloat16,
-    #     device_map="auto",
-    #     trust_remote_code=True,
-    # )
-    # model.eval()
-    
-    llm = HuggingFacePipeline(
-        
+    tokenizer = AutoTokenizer.from_pretrained(
+        HF_MODEL,
+        # trust_remote_code is required to load custom tokenizer and reasoning parser.
+        trust_remote_code=True,
+    )
+    model = AutoModelForCausalLM.from_pretrained(
+        HF_MODEL,
+        dtype=torch.bfloat16,
+        device_map="auto",
+        trust_remote_code=True,
+    )
+    pipe = pipeline(
+        "text-generation", model=model, tokenizer=tokenizer, 
+        max_new_tokens=256, do_sample=True, temperature=0.7, top_p=0.9,
+        return_full_text=False
     )
     
+    llm = HuggingFacePipeline(pipeline=pipe)
+    chat_model = ChatHuggingFace(llm=llm)
+    
     system_prompt = "あなたはユーザの質問に答えるアシスタントです。回答は200文字程度で要点だけをまとめて簡潔に答えてください。"
-    messages = [SystemMessage(content=system_prompt)] + [
-        ROLES[msg["role"]](content=msg["content"]) 
-        for msg in st.session_state.messages
-    ]
+    # messages = [SystemMessage(content=system_prompt)] + [
+    #     ROLES[msg["role"]](content=msg["content"]) 
+    #     for msg in st.session_state.messages
+    # ]
+    messages = [{"role": "system", "content": system_prompt}] + st.session_state.messages
     
-    response = llm.invoke(messages)
+    response = chat_model.invoke(messages)
     
-    response_html = Markdown().convert(response)
+    response_html = Markdown().convert(response.content)
     
     return response_html
     
@@ -208,6 +207,62 @@ def response_generator_langchain_ollama_rag() -> str:
     with open("./output.md", mode="w", encoding="utf-8") as f:
         f.write(response)
     
+    response_html = Markdown().convert(response)
+    
+    return response_html
+
+
+def response_generator_langchain_huggingface_rag() -> str:
+    """langchain_huggingfaceを使用+RAG
+    """
+    tokenizer = AutoTokenizer.from_pretrained(
+        HF_MODEL,
+        # trust_remote_code is required to load custom tokenizer and reasoning parser.
+        trust_remote_code=True,
+    )
+    model = AutoModelForCausalLM.from_pretrained(
+        HF_MODEL,
+        dtype=torch.bfloat16,
+        device_map="auto",
+        trust_remote_code=True,
+    )
+    pipe = pipeline(
+        "text-generation", model=model, tokenizer=tokenizer, 
+        max_new_tokens=256, do_sample=True, temperature=0.7, top_p=0.9
+    )
+    llm = HuggingFacePipeline(pipeline=pipe)
+    
+    # 直前のユーザの入力を取得
+    user_input = st.session_state.messages[-1]["content"]
+    
+    # ベクトル化する準備
+    model_kwargs = {
+        "device": "cpu", # NOTE: モデルと合わせてVRAM容量を超えるのでCPUで実行
+        "trust_remote_code": True
+    }
+    embedding = HuggingFaceEmbeddings(
+        model_name="pfnet/plamo-embedding-1b",
+        model_kwargs=model_kwargs
+    )
+    
+    # DBを読み込んで知識データ取得
+    vectorstore = Chroma(collection_name="elephants", 
+                         persist_directory=DATABASE_DIR, 
+                         embedding_function=embedding)
+    docs = vectorstore.similarity_search(query=user_input, k=10)
+    context = "\n".join([f"Content:\n{doc.page_content}" for doc in docs])
+    
+    messages = [
+        ROLES[msg["role"]](content=msg["content"]) 
+        for msg in st.session_state.messages[:-1]
+    ] + [HumanMessage(content=RAG_PROMPT.format(question=user_input, context=context))]
+    
+    response = llm.invoke(messages)
+    
+    with open("./output.md", mode="w", encoding="utf-8") as f:
+        f.write(response)
+    
+    response = response.split("AI:")[-1].strip()  # HuggingFacePipelineの出力から回答部分だけ抜き取る
     response_html = Markdown().convert(response)
     
     return response_html
