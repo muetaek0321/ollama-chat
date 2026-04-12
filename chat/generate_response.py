@@ -1,6 +1,7 @@
 import os
 os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 os.environ["HF_HOME"] = "./pretrained" # 事前学習モデルの保存先指定
+import json
 
 import streamlit as st
 import torch
@@ -13,10 +14,10 @@ from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
 from langchain.embeddings import HuggingFaceEmbeddings
 from langchain_chroma import Chroma
-from langchain_huggingface import HuggingFaceEndpoint, ChatHuggingFace, HuggingFacePipeline
+from langchain_huggingface import ChatHuggingFace, HuggingFacePipeline
 from transformers import AutoModelForCausalLM, AutoTokenizer, pipeline
 
-from chat.parse_json import parse_chat_output
+from chat.parse_json import parse_chat_output, parse_rag_output
 
 
 # 環境変数設定
@@ -95,9 +96,12 @@ def response_generator_huggingface_model() -> str:
     # 出力データを変換して返答文を取得
     generated_ids: list[int] = output_tensor[0][inputs["input_ids"].shape[1]:].tolist()
     response = tokenizer.decode(generated_ids)
-    response = parse_chat_output(response)
+    parsed_response = parse_chat_output(response)
     
-    response_html = Markdown().convert(response["assistant"]["message"])
+    with open("./output.json", mode="w", encoding="utf-8") as f:
+        json.dump(parsed_response, f, ensure_ascii=False, indent=4)
+    
+    response_html = Markdown().convert(parsed_response["assistant"]["message"])
     
     return response_html
 
@@ -226,11 +230,7 @@ def response_generator_langchain_huggingface_rag() -> str:
         device_map="auto",
         trust_remote_code=True,
     )
-    pipe = pipeline(
-        "text-generation", model=model, tokenizer=tokenizer, 
-        max_new_tokens=256, do_sample=True, temperature=0.7, top_p=0.9
-    )
-    llm = HuggingFacePipeline(pipeline=pipe)
+    model.eval()
     
     # 直前のユーザの入力を取得
     user_input = st.session_state.messages[-1]["content"]
@@ -252,21 +252,47 @@ def response_generator_langchain_huggingface_rag() -> str:
     docs = vectorstore.similarity_search(query=user_input, k=10)
     context = "\n".join([f"Content:\n{doc.page_content}" for doc in docs])
     
-    messages = [
-        ROLES[msg["role"]](content=msg["content"]) 
-        for msg in st.session_state.messages[:-1]
-    ] + [HumanMessage(content=RAG_PROMPT.format(question=user_input, context=context))]
+    # システムプロンプトの用意
+    system_prompt = [{
+        "role": "system",
+        "content": "あなたはユーザの質問に答えるアシスタントです。回答は最大500文字でまとめて簡潔に答えてください。"
+    }]
     
-    response = llm.invoke(messages)
+    # 直前のユーザの入力を取得
+    rag_input = [{
+        "role": "user",
+        "content": RAG_PROMPT.format(question=user_input, context=context)
+    }]
     
-    with open("./output.md", mode="w", encoding="utf-8") as f:
-        f.write(response)
+    prompt: str = tokenizer.apply_chat_template(
+        system_prompt + st.session_state.messages[:-1] + rag_input,
+        tokenize=False,
+        add_generation_prompt=True,
+        reasoning_effort="low",  # {"low", "medium", "high"}
+    )
+    inputs = tokenizer(prompt, return_tensors="pt").to(model.device)
     
-    response = response.split("AI:")[-1].strip()  # HuggingFacePipelineの出力から回答部分だけ抜き取る
-    response_html = Markdown().convert(response)
+    with torch.no_grad():
+        output_tensor = model.generate(
+            **inputs,
+            max_new_tokens=512,
+            do_sample=True,
+            temperature=0.7,
+            top_p=0.9,
+        )
+    
+    # 出力データを変換して返答文を取得
+    generated_ids: list[int] = output_tensor[0][inputs["input_ids"].shape[1]:].tolist()
+    response = tokenizer.decode(generated_ids)
+    parsed_response = parse_rag_output(response)
+    
+    # with open("./output.json", mode="w", encoding="utf-8") as f:
+    #     json.dump(parsed_response, f, ensure_ascii=False, indent=4)
+    
+    response_html = Markdown().convert(parsed_response)
     
     return response_html
-
+    
 
 def response_generator_langchain_gemini_rag() -> str:
     """Geminiを使用+RAG

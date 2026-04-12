@@ -27,3 +27,12 @@ def parse_chat_output(text: str) -> dict:
         }
 
     return result
+
+
+def parse_rag_output(text: str) -> str:
+    message_match = re.search(r"final<\|message\|>(.*?)<\|return\|>", text, re.DOTALL)
+    if message_match:
+        response_text = message_match.group(1).strip()
+
+    return response_text
+
