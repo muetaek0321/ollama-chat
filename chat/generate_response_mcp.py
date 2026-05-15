@@ -28,7 +28,8 @@ MCP_PROMPT = """
 答え: {agent_scratchpad}
 """
 MCP_CONFIG_PATH = "./chat/mcp_config.json"
-
+# OLLAMA_MODEL = "gpt-oss:20b"
+OLLAMA_MODEL = "gemma4:e4b"
 ROLES = {
     "user": HumanMessage,
     "assistant": AIMessage
@@ -52,7 +53,7 @@ async def create_gemini_mcp_response(
     messages: List[Dict[str, str]]
 ) -> str:        
     # モデルを準備
-    llm = ChatOllama(model='gpt-oss:20b')
+    llm = ChatOllama(model=OLLAMA_MODEL)
     # llm = ChatGoogleGenerativeAI(model="gemini-2.0-flash")
     
     # プロンプトを設定

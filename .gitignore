@@ -174,3 +174,4 @@ pretrained/
 chroma/
 output*.md
 output*.json
+*_context.txt

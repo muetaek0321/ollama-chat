@@ -184,22 +184,25 @@ def response_generator_langchain_ollama_rag() -> str:
     # 直前のユーザの入力を取得
     user_input = st.session_state.messages[-1]["content"]
     
-    # ベクトル化する準備
-    model_kwargs = {
-        "device": "cuda" if torch.cuda.is_available() else "cpu", 
-        "trust_remote_code": True
-    }
-    embedding = HuggingFaceEmbeddings(
-        model_name="pfnet/plamo-embedding-1b",
-        model_kwargs=model_kwargs
-    )
+    # # ベクトル化する準備
+    # model_kwargs = {
+    #     "device": "cuda" if torch.cuda.is_available() else "cpu", 
+    #     "trust_remote_code": True
+    # }
+    # embedding = HuggingFaceEmbeddings(
+    #     model_name="pfnet/plamo-embedding-1b",
+    #     model_kwargs=model_kwargs
+    # )
     
-    # DBを読み込んで知識データ取得
-    vectorstore = Chroma(collection_name="elephants", 
-                         persist_directory=DATABASE_DIR, 
-                         embedding_function=embedding)
-    docs = vectorstore.similarity_search(query=user_input, k=10)
-    context = "\n".join([f"Content:\n{doc.page_content}" for doc in docs])
+    # # DBを読み込んで知識データ取得
+    # vectorstore = Chroma(collection_name="elephants", 
+    #                      persist_directory=DATABASE_DIR, 
+    #                      embedding_function=embedding)
+    # docs = vectorstore.similarity_search(query=user_input, k=10)
+    # context = "\n".join([f"Content:\n{doc.page_content}" for doc in docs])
+    
+    with open("./biography_context.txt", mode="r", encoding="utf-8") as f:
+        context = f.read()
     
     messages = [
         ROLES[msg["role"]](content=msg["content"]) 
@@ -235,22 +238,25 @@ def response_generator_langchain_huggingface_rag() -> str:
     # 直前のユーザの入力を取得
     user_input = st.session_state.messages[-1]["content"]
     
-    # ベクトル化する準備
-    model_kwargs = {
-        "device": "cpu", # NOTE: モデルと合わせてVRAM容量を超えるのでCPUで実行
-        "trust_remote_code": True
-    }
-    embedding = HuggingFaceEmbeddings(
-        model_name="pfnet/plamo-embedding-1b",
-        model_kwargs=model_kwargs
-    )
+    # # ベクトル化する準備
+    # model_kwargs = {
+    #     "device": "cpu", # NOTE: モデルと合わせてVRAM容量を超えるのでCPUで実行
+    #     "trust_remote_code": True
+    # }
+    # embedding = HuggingFaceEmbeddings(
+    #     model_name="pfnet/plamo-embedding-1b",
+    #     model_kwargs=model_kwargs
+    # )
     
-    # DBを読み込んで知識データ取得
-    vectorstore = Chroma(collection_name="elephants", 
-                         persist_directory=DATABASE_DIR, 
-                         embedding_function=embedding)
-    docs = vectorstore.similarity_search(query=user_input, k=10)
-    context = "\n".join([f"Content:\n{doc.page_content}" for doc in docs])
+    # # DBを読み込んで知識データ取得
+    # vectorstore = Chroma(collection_name="elephants", 
+    #                      persist_directory=DATABASE_DIR, 
+    #                      embedding_function=embedding)
+    # docs = vectorstore.similarity_search(query=user_input, k=10)
+    # context = "\n".join([f"Content:\n{doc.page_content}" for doc in docs])
+    
+    with open("./biography_context.txt", mode="r", encoding="utf-8") as f:
+        context = f.read()
     
     # システムプロンプトの用意
     system_prompt = [{
