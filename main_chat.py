@@ -6,7 +6,8 @@ import time
 import streamlit as st
 
 from chat.generate_response import *
-from chat.generate_response_mcp import *
+from chat.generate_response_gemma4 import response_generator_langchain_gemma4_rag
+# from chat.generate_response_mcp import *
 
 
 st.title("Ollama chat")
@@ -40,8 +41,12 @@ if prompt := st.chat_input("What is up?"):
         # response_text = response_generator_langchain_ollama()
         # response_text = response_generator_langchain_huggingface()
         # response_text = response_generator_langchain_ollama_rag()
-        response_text = response_generator_langchain_huggingface_rag()
+        # response_text = response_generator_langchain_huggingface_rag()
+        # response_text = response_generator_langchain_huggingface_gemma4_rag()
         # response_text = response_generator_langchain_gemini_rag()
+        
+        response_text = response_generator_langchain_gemma4_rag()
+        
         # response_text = response_generator_mcp()
         
         # 返答生成にかかった時間を表示

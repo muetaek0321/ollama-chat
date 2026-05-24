@@ -12,10 +12,10 @@ from ollama import ChatResponse
 from langchain_ollama.llms import OllamaLLM
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
-from langchain.embeddings import HuggingFaceEmbeddings
-from langchain_chroma import Chroma
+# from langchain.embeddings import HuggingFaceEmbeddings
+# from langchain_chroma import Chroma
 from langchain_huggingface import ChatHuggingFace, HuggingFacePipeline
-from transformers import AutoModelForCausalLM, AutoTokenizer, pipeline
+from transformers import AutoModelForCausalLM, AutoProcessor, AutoTokenizer, pipeline
 
 from chat.parse_json import parse_chat_output, parse_rag_output
 
@@ -33,13 +33,16 @@ ROLES = {
 }
 
 
-__all__ = ["response_generator_ollama_python", 
-           "response_generator_huggingface_model",
-           "response_generator_langchain_ollama",
-           "response_generator_langchain_huggingface",
-           "response_generator_langchain_ollama_rag", 
-           "response_generator_langchain_huggingface_rag",
-           "response_generator_langchain_gemini_rag"]
+__all__ = [
+    "response_generator_ollama_python", 
+    "response_generator_huggingface_model",
+    "response_generator_langchain_ollama",
+    "response_generator_langchain_huggingface",
+    "response_generator_langchain_ollama_rag", 
+    "response_generator_langchain_huggingface_rag",
+    "response_generator_langchain_huggingface_gemma4_rag",
+    # "response_generator_langchain_gemini_rag"
+]
 
 
 def response_generator_ollama_python() -> str:
@@ -220,7 +223,7 @@ def response_generator_langchain_ollama_rag() -> str:
 
 
 def response_generator_langchain_huggingface_rag() -> str:
-    """langchain_huggingfaceを使用+RAG
+    """langchain_huggingfaceを使用+RAG（LLM-jp-4用？）
     """
     tokenizer = AutoTokenizer.from_pretrained(
         HF_MODEL,
@@ -298,43 +301,105 @@ def response_generator_langchain_huggingface_rag() -> str:
     response_html = Markdown().convert(parsed_response)
     
     return response_html
-    
 
-def response_generator_langchain_gemini_rag() -> str:
-    """Geminiを使用+RAG
+
+def response_generator_langchain_huggingface_gemma4_rag() -> str:
+    """langchain_huggingfaceを使用+RAG（Gemma4用？）
     """
-    llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash")
+    # Target Model
+    processor = AutoProcessor.from_pretrained("google/gemma-4-E2B-it")
+    target_model = AutoModelForCausalLM.from_pretrained(
+        "google/gemma-4-E2B-it",
+        dtype="auto",
+        device_map="auto",
+
+    )
+
+    # Assistant Model (the drafter)
+    assistant_model = AutoModelForCausalLM.from_pretrained(
+        "google/gemma-4-E2B-it-assistant",
+        dtype="auto",
+        device_map="auto",
+    )
     
     # 直前のユーザの入力を取得
     user_input = st.session_state.messages[-1]["content"]
     
-    # ベクトル化する準備
-    model_kwargs = {
-        "device": "cuda" if torch.cuda.is_available() else "cpu", 
-        "trust_remote_code": True
-    }
-    embedding = HuggingFaceEmbeddings(
-        model_name="pfnet/plamo-embedding-1b",
-        model_kwargs=model_kwargs
+    with open("./biography_context.txt", mode="r", encoding="utf-8") as f:
+        context = f.read()
+    
+    # システムプロンプトの用意
+    system_prompt = [{
+        "role": "system",
+        "content": "あなたはユーザの質問に答えるアシスタントです。"
+    }]
+    
+    # 直前のユーザの入力を取得
+    rag_input = [{
+        "role": "user",
+        "content": RAG_PROMPT.format(question=user_input, context=context)
+    }]
+    
+    # Process input
+    text = processor.apply_chat_template(
+        system_prompt + st.session_state.messages[:-1] + rag_input, 
+        tokenize=False, 
+        add_generation_prompt=True, 
     )
+    inputs = processor(text=text, return_tensors="pt").to(target_model.device)
+    input_len = inputs["input_ids"].shape[-1]
     
-    # DBを読み込んで知識データ取得
-    vectorstore = Chroma(collection_name="elephants", 
-                         persist_directory="chat/chroma", 
-                         embedding_function=embedding)
-    docs = vectorstore.similarity_search(query=user_input, k=10)
-    context = "\n".join([f"Content:\n{doc.page_content}" for doc in docs])
+    # Generate output
+    outputs = target_model.generate(
+        **inputs,
+        assistant_model=assistant_model,
+        max_new_tokens=512,
+    )
+    response = processor.decode(outputs[0][input_len:], skip_special_tokens=False)
     
-    messages = [
-        ROLES[msg["role"]](content=msg["content"]) 
-        for msg in st.session_state.messages[:-1]
-    ] + [HumanMessage(content=RAG_PROMPT.format(question=user_input, context=context))]
+    # Parse output
+    parsed_response = processor.parse_response(response)
     
-    response = llm.invoke(messages).content
-    
-    with open("./output.md", mode="w", encoding="cp932") as f:
-        f.write(response)
-    
-    response_html = Markdown().convert(response)
+    response_html = Markdown().convert(parsed_response["content"])
     
     return response_html
+  
+
+# def response_generator_langchain_gemini_rag() -> str:
+#     """Geminiを使用+RAG
+#     """
+#     llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash")
+    
+#     # 直前のユーザの入力を取得
+#     user_input = st.session_state.messages[-1]["content"]
+    
+#     # ベクトル化する準備
+#     model_kwargs = {
+#         "device": "cuda" if torch.cuda.is_available() else "cpu", 
+#         "trust_remote_code": True
+#     }
+#     embedding = HuggingFaceEmbeddings(
+#         model_name="pfnet/plamo-embedding-1b",
+#         model_kwargs=model_kwargs
+#     )
+    
+#     # DBを読み込んで知識データ取得
+#     vectorstore = Chroma(collection_name="elephants", 
+#                          persist_directory="chat/chroma", 
+#                          embedding_function=embedding)
+#     docs = vectorstore.similarity_search(query=user_input, k=10)
+#     context = "\n".join([f"Content:\n{doc.page_content}" for doc in docs])
+    
+#     messages = [
+#         ROLES[msg["role"]](content=msg["content"]) 
+#         for msg in st.session_state.messages[:-1]
+#     ] + [HumanMessage(content=RAG_PROMPT.format(question=user_input, context=context))]
+    
+#     response = llm.invoke(messages).content
+    
+#     with open("./output.md", mode="w", encoding="cp932") as f:
+#         f.write(response)
+    
+#     response_html = Markdown().convert(response)
+    
+#     return response_html
